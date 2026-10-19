@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador BLS / ACLS / PALS - AHA 2025</title>
+    
+    <!-- Bootstrap 5 CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Flaticon UIcons CDN -->
+    <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.1.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
+
+    <style>
+        :root {
+            --aha-red: #E31837;
+            --aha-blue: #003865;
+            --aha-bg: #f8f9fa;
+            --pals-purple: #6f42c1;
+        }
+
+        body {
+            background-color: var(--aha-bg);
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #333;
+        }
+
+        .bg-aha-blue { background-color: var(--aha-blue) !important; color: white; }
+        .text-aha-blue { color: var(--aha-blue) !important; }
+        .text-aha-red { color: var(--aha-red) !important; }
+        
+        .badge-BLS { background-color: #6c757d; color: white; }
+        .badge-ACLS { background-color: var(--aha-red); color: white; }
+        .badge-PALS { background-color: var(--pals-purple); color: white; }
+
+        .navbar-custom { background-color: var(--aha-blue); box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-bottom: 4px solid var(--aha-red);}
+        
+        .interactive-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+        .interactive-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 56, 101, 0.15) !important;
+            border-color: var(--aha-blue);
+        }
+        .interactive-card i {
+            transition: all 0.3s ease;
+        }
+        .interactive-card:hover i {
+            color: var(--aha-red) !important;
+            transform: scale(1.1);
+        }
+
+        .option-btn {
+            text-align: left;
+            transition: all 0.2s ease;
+            font-weight: 500;
+            border-width: 2px;
+        }
+        .option-btn:hover:not(:disabled) {
+            background-color: #e9ecef;
+            transform: translateX(5px);
+        }
+        .option-badge {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake { 
+            10%, 90% { transform: translate3d(-2px, 0, 0); } 
+            20%, 80% { transform: translate3d(3px, 0, 0); } 
+            30%, 50%, 70% { transform: translate3d(-5px, 0, 0); } 
+            40%, 60% { transform: translate3d(5px, 0, 0); } 
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-dark navbar-custom sticky-top">
+        <div class="container-fluid max-w-6xl px-4 py-2">
+            <a class="navbar-brand fw-bold d-flex align-items-center" href="#">
+                <i class="fi fi-rr-heart-pulse fs-3 me-3 text-danger"></i>
+                ACLS / BLS / PALS Master Sim
+            </a>
+            <button id="btn-home" class="btn btn-light btn-sm fw-bold d-none px-3 rounded-pill shadow-sm">
+                <i class="fi fi-rr-arrow-left me-1"></i> Volver al Menú
+            </button>
+        </div>
+    </nav>
+
+    <main class="container py-5">
+        
+        <div id="home-view" class="fade-in">
+            <div class="mb-5 text-center">
+                <h2 class="fw-bold text-aha-blue mb-3">Escenarios de Certificación AHA 2025</h2>
+                <p class="text-muted lead">Selecciona un módulo clínico. Responde correctamente basándote en los algoritmos vigentes.</p>
+            </div>
+            
+            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4" id="cards-container">
+            </div>
+        </div>
+
+        <div id="sim-view" class="d-none max-w-3xl mx-auto">
+            <div class="card shadow border-0 rounded-4 overflow-hidden">
+                <div class="card-header bg-aha-blue text-white p-4 d-flex align-items-center">
+                    <i id="sim-icon" class="fs-2 me-3"></i>
+                    <div>
+                        <span id="sim-category" class="badge bg-light text-dark mb-1 d-inline-block"></span>
+                        <h3 id="sim-title" class="mb-0 fw-bold"></h3>
+                    </div>
+                </div>
+                
+                <div class="card-body p-4 p-md-5">
+                    <div id="sim-scenario" class="alert bg-light border-aha-blue fs-5 mb-4 shadow-sm text-dark pb-3">
+                    </div>
+                    <div id="sim-feedback" class="d-none alert mb-4 fw-bold"></div>
+                    <div id="sim-options" class="d-flex flex-column gap-3">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        const db = {
+            // --- BLS ---
+            "bls-adulto": {
+                category: "BLS",
+                title: "Soporte Vital Básico",
+                description: "Evaluación inicial, activación del sistema y uso del DEA en adultos.",
+                icon: "fi fi-rr-heart-pulse",
+                startNode: "node_1",
+                nodes: {
+                    "node_1": {
+                        text: "Llegas a la escena y te aseguras de que es segura. Un adulto yace en el suelo. ¿Cuál es el primer paso?",
+                        options: [
+                            { text: "Comprobar el pulso carotídeo inmediatamente.", next: "node_1", isCorrect: false, feedback: "Debes comprobar primero si el paciente responde antes de evaluar el pulso." },
+                            { text: "Golpear los hombros y gritar: '¿Se encuentra bien?'", next: "node_2", isCorrect: true }
+                        ]
+                    },
+                    "node_2": {
+                        text: "La víctima no responde. ¿Qué debes hacer a continuación?",
+                        options: [
+                            { text: "Iniciar compresiones torácicas.", next: "node_2", isCorrect: false, feedback: "Antes de iniciar RCP, debes pedir ayuda y activar el sistema de respuesta a emergencias." },
+                            { text: "Pedir ayuda, activar el sistema de emergencias y conseguir un DEA.", next: "node_3", isCorrect: true }
+                        ]
+                    },
+                    "node_3": {
+                        text: "El sistema está activado. Ahora evalúas la respiración y el pulso simultáneamente. ¿Cuánto tiempo debes tomar?",
+                        options: [
+                            { text: "Al menos 10 segundos, pero no más de 15 segundos.", next: "node_3", isCorrect: false, feedback: "No debe exceder los 10 segundos." },
+                            { text: "Al menos 5 segundos, pero no más de 10 segundos.", next: "node_4", isCorrect: true }
+                        ]
+                    },
+                    "node_4": {
+                        text: "No respira y no tiene pulso. Inicias RCP de alta calidad. ¿Cuál es la relación compresión-ventilación y la profundidad correcta?",
+                        options: [
+                            { text: "30 compresiones por 2 ventilaciones, al menos 5 cm (2 pulgadas).", next: "node_5", isCorrect: true },
+                            { text: "15 compresiones por 2 ventilaciones, profundidad de 4 cm.", next: "node_4", isCorrect: false, feedback: "En adultos siempre es 30:2 con al menos 5 cm de profundidad." }
+                        ]
+                    },
+                    "node_5": {
+                        text: "Llega el DEA a la escena. ¿Cuál es el paso más crítico e inicial para operarlo?",
+                        options: [
+                            { text: "Colocar los parches en el pecho desnudo del paciente.", next: "node_5", isCorrect: false, feedback: "El error más común es olvidar encender el equipo primero." },
+                            { text: "Encender el DEA.", next: "end", isCorrect: true }
+                        ]
+                    }
+                }
+            },
+            
+            // --- ACLS ---
+            "paro-fv-tv": {
+                category: "ACLS",
+                title: "Paro Cardíaco: FV / TVsp",
+                description: "Manejo de ritmos desfibrilables en adultos. RCP, choques y antiarrítmicos.",
+                icon: "fi fi-rr-bolt",
+                startNode: "node_1",
+                nodes: {
+                    "node_1": {
+                        text: "Iniciaste RCP y conectaste el monitor. El ritmo muestra una Fibrilación Ventricular (FV). Acción prioritaria:",
+                        options: [
+                            { text: "Administrar Adrenalina 1 mg IV/IO de inmediato.", next: "node_1", isCorrect: false, feedback: "La desfibrilación eléctrica temprana tiene prioridad sobre la medicación." },
+                            { text: "Administrar una descarga e inmediatamente reanudar la RCP por 2 minutos.", next: "node_2", isCorrect: true }
+                        ]
+                    },
+                    "node_2": {
+                        text: "Se dio la 1.ª descarga y 2 min de RCP. El ritmo sigue siendo FV. Siguiente paso:",
+                        options: [
+                            { text: "Administrar Amiodarona 300 mg.", next: "node_2", isCorrect: false, feedback: "Los antiarrítmicos se administran después de la 3.ª descarga." },
+                            { text: "Dar 2.ª descarga, reanudar RCP y administrar Adrenalina 1 mg IV/IO.", next: "node_3", isCorrect: true }
+                        ]
+                    },
+                    "node_3": {
+                        text: "Pasan 2 min de RCP y la Adrenalina fue administrada. Sigue en FV refractaria. Siguiente paso:",
+                        options: [
+                            { text: "Dar 3.ª descarga, reanudar RCP y administrar Amiodarona 300 mg o Lidocaína 1-1.5 mg/kg.", next: "node_4", isCorrect: true },
+                            { text: "Dar 3.ª descarga, reanudar RCP y dar Adrenalina 1 mg extra.", next: "node_3", isCorrect: false, feedback: "La adrenalina es cada 3-5 min. Después del 3er choque toca antiarrítmico." }
+                        ]
+                    },
+                    "node_4": {
+                        text: "Se coloca un tubo endotraqueal (vía aérea avanzada). ¿Cómo cambia la dinámica de la RCP?",
+                        options: [
+                            { text: "Pausar las compresiones brevemente para dar 2 ventilaciones.", next: "node_4", isCorrect: false, feedback: "Con vía aérea avanzada NO se pausan las compresiones." },
+                            { text: "Compresiones continuas (100-120/min) y dar 1 ventilación cada 6 segundos (10/min).", next: "end", isCorrect: true }
+                        ]
+                    }
+                }
+            },
+            "paro-asistolia": {
+                category: "ACLS",
+                title: "Paro Cardíaco: Asistolia / AESP",
+                description: "Manejo de ritmos no desfibrilables. Adrenalina temprana y causas reversibles (H y T).",
+                icon: "fi fi-rr-heart-crack",
+                startNode: "node_1",
+                nodes: {
+                    "node_1": {
+                        text: "Monitor muestra Asistolia. Verificas conexiones y el paciente sigue sin pulso. Manejo inicial:",
+                        options: [
+                            { text: "Descarga a 200J.", next: "node_1", isCorrect: false, feedback: "La asistolia NO es desfibrilable." },
+                            { text: "Iniciar RCP de inmediato y administrar Adrenalina 1 mg IV/IO lo antes posible.", next: "node_2", isCorrect: true }
+                        ]
+                    },
+                    "node_2": {
+                        text: "Adrenalina administrada. Tras 2 min de RCP, el monitor muestra ritmo sinusal a 60 lpm, pero el paciente NO tiene pulso (AESP).",
+                        options: [
+                            { text: "Continuar RCP por 2 minutos e investigar causas reversibles (H y T).", next: "node_3", isCorrect: true },
+                            { text: "Administrar Atropina 1 mg.", next: "node_2", isCorrect: false, feedback: "La Atropina ya no se recomienda en Asistolia/AESP." }
+                        ]
+                    },
+                    "node_3": {
+                        text: "El equipo reporta distensión venosa yugular, ruidos cardíacos apagados e hipotensión severa. ¿Qué causa sospechas?",
+                        options: [
+                            { text: "Taponamiento cardíaco (requiere pericardiocentesis).", next: "end", isCorrect: true },
+                            { text: "Neumotórax a tensión.", next: "node_3", isCorrect: false, feedback: "La triada de Beck (ruidos apagados, ingurgitación yugular, hipotensión) es clásica del Taponamiento." }
+                        ]
+                    }
+                }
+            },
+            "bradicardia-adulto": {
+                category: "ACLS",
+                title: "Bradicardia Sintomática",
+                description: "Manejo de frecuencia < 50 lpm con inestabilidad en adultos.",
+                icon: "fi fi-rr-pulse",
+                startNode: "node_1",
+                nodes: {
+                    "node_1": {
+                        text: "Hombre con FC 35 lpm. Presenta hipotensión de 70/40 mmHg y confusión mental aguda. ¿Primer fármaco a administrar?",
+                        options: [
+                            { text: "Atropina 1 mg IV en bolo.", next: "node_2", isCorrect: true },
+                            { text: "Atropina 0.5 mg IV en bolo.", next: "node_1", isCorrect: false, feedback: "La dosis inicial de atropina se actualizó a 1 mg." }
+                        ]
+                    },
+                    "node_2": {
+                        text: "Has administrado la dosis máxima de Atropina (3 mg) sin mejoría. Sigue inestable.",
+                        options: [
+                            { text: "Dopamina 2 a 10 mcg/kg/min.", next: "node_2", isCorrect: false, feedback: "La dosis de Dopamina recomendada es de 5 a 20 mcg/kg/min." },
+                            { text: "Marcapasos transcutáneo O infusión de Dopamina (5-20 mcg/kg/min) O infusión de Epinefrina (2-10 mcg/min).", next: "end", isCorrect: true }
+                        ]
+                    }
+                }
+            },
+            "taquicardia-adulto": {
+                category: "ACLS",
+                title: "Taquicardia en Adultos",
+                description: "Manejo de taquiarritmias estables e inestables.",
+                icon: "fi fi-rr-dashboard",
+                startNode: "node_1",
+                nodes: {
+                    "node_1": {
+                        text: "Mujer con FC 180 lpm. Presión arterial 60/40, diaforética y somnolienta. QRS estrecho. ¿Tratamiento inmediato?",
+                        options: [
+                            { text: "Adenosina 6 mg IV rápido.", next: "node_1", isCorrect: false, feedback: "Está INESTABLE. La prioridad es eléctrica." },
+                            { text: "Cardioversión sincronizada de inmediato.", next: "node_2", isCorrect: true }
+                        ]
+                    },
+                    "node_2": {
+                        text: "Nuevo paciente: Taquicardia regular de QRS estrecho a 170 lpm. ESTABLE (TA 120/80). Maniobras vagales fallidas. Fármaco de elección:",
+                        options: [
+                            { text: "Amiodarona 150 mg IV.", next: "node_2", isCorrect: false, feedback: "La amiodarona es para QRS ancho. Para estrecho, usamos Adenosina." },
+                            { text: "Adenosina 6 mg IV en bolo rápido con lavado de solución salina.", next: "end", isCorrect: true }
+                        ]
+                    }
+                }
+            },
+            "sca-ictus": {
+                category: "ACLS",
+                title: "SCA e Ictus Agudo",
+                description: "Reconocimiento y manejo inicial de IAM y ACV.",
+                icon: "fi fi-rr-ambulance",
+                startNode: "node_1",
+                nodes: {
+                    "node_1": {
+                        text: "SCA: Dolor torácico opresivo de 45 min. Saturación 96%. ECG muestra supradesnivel ST. ¿Manejo del oxígeno?",
+                        options: [
+                            { text: "Oxígeno suplementario a 4 L/min rutinariamente.", next: "node_1", isCorrect: false, feedback: "Oxígeno SOLO si sat < 90% (o 94% según protocolo local)." },
+                            { text: "Retener el oxígeno ya que satura > 90%. Notificar hemodinamia (ICP).", next: "node_2", isCorrect: true }
+                        ]
+                    },
+                    "node_2": {
+                        text: "ICTUS: Hombre con debilidad facial y habla pastosa de 2 horas de evolución. ¿Estudio prioritario?",
+                        options: [
+                            { text: "Resonancia Magnética (RM) con contraste.", next: "node_2", isCorrect: false, feedback: "La TC es el estándar de oro para descartar sangrado rápido." },
+                            { text: "TC craneal sin contraste en los primeros 25 minutos.", next: "end", isCorrect: true }
+                        ]
+                    }
+                }
+            },
+            "cuidados-posparo": {
+                category: "ACLS",
+                title: "Cuidados Posparo (RCE)",
+                description: "Manejo hemodinámico y neuroprotección tras el ROSC.",
+                icon: "fi fi-rr-treatment",
+                startNode: "node_1",
+                nodes: {
+                    "node_1": {
+                        text: "El paciente ha recuperado el pulso (ROSC). La saturación de oxígeno marca 100% con FiO2 al 100%. ¿Qué ajuste ventilatorio haces?",
+                        options: [
+                            { text: "Mantener la FiO2 al 100% para asegurar oxigenación cerebral.", next: "node_1", isCorrect: false, feedback: "La hiperoxia causa daño por reperfusión." },
+                            { text: "Reducir la FiO2 para mantener una saturación entre 92% y 98%.", next: "node_2", isCorrect: true }
+                        ]
+                    },
+                    "node_2": {
+                        text: "La vía aérea está optimizada. El paciente está comatoso. Intervención neurológica prioritaria:",
+                        options: [
+                            { text: "Iniciar Manejo Específico de Temperatura (TTM) entre 32°C y 36°C.", next: "end", isCorrect: true },
+                            { text: "Infundir solución glucosada para aporte energético.", next: "node_2", isCorrect: false, feedback: "Evitar hiperglucemia y no usar dextrosa rutinariamente posparo." }
+                        ]
+                    }
+                }
+            },
+
+            // --- PALS ---
+            "pals-paro": {
+                category: "PALS",
+                title: "Pediátrico: Paro Cardíaco",
+                description: "Reanimación en niños. Descargas basadas en peso e infusiones.",
+                icon: "fi fi-rr-child-head",
+                startNode: "node_1",
+                nodes: {
+                    "node_1": {
+                        text: "Niño de 4 años (15 kg) sin respuesta, no respira y sin pulso. Hay 2 reanimadores. Relación compresión-ventilación:",
+                        options: [
+                            { text: "30 compresiones por 2 ventilaciones.", next: "node_1", isCorrect: false, feedback: "Con 2 reanimadores de salud en pediatría, la relación cambia." },
+                            { text: "15 compresiones por 2 ventilaciones.", next: "node_2", isCorrect: true }
+                        ]
+                    },
+                    "node_2": {
+                        text: "Monitor: Fibrilación Ventricular (FV). ¿Dosis de energía para la primera descarga manual?",
+                        options: [
+                            { text: "2 J/kg.", next: "node_3", isCorrect: true },
+                            { text: "4 J/kg.", next: "node_2", isCorrect: false, feedback: "1.ª descarga es 2 J/kg. Posteriores serán 4 J/kg o más." }
+                        ]
+                    },
+                    "node_3": {
+                        text: "Administraste 2 J/kg y 2 min de RCP. Sigue en FV.",
+                        options: [
+                            { text: "Administrar 2.ª descarga a 4 J/kg, reanudar RCP y administrar Adrenalina 0.01 mg/kg.", next: "node_4", isCorrect: true },
+                            { text: "Administrar 2.ª descarga a 2 J/kg, reanudar RCP y dar Amiodarona 5 mg/kg.", next: "node_3", isCorrect: false, feedback: "La segunda descarga es 4 J/kg. La Amiodarona es tras la 3.ª descarga." }
+                        ]
+                    },
+                    "node_4": {
+                        text: "Tras adrenalina y más RCP, sigue en FV. Das 3.ª descarga (≥4 J/kg). Antiarrítmico indicado:",
+                        options: [
+                            { text: "Amiodarona 5 mg/kg en bolo O Lidocaína 1 mg/kg.", next: "end", isCorrect: true },
+                            { text: "Amiodarona 300 mg en bolo.", next: "node_4", isCorrect: false, feedback: "300 mg es la dosis para adultos." }
+                        ]
+                    }
+                }
+            },
+            "pals-bradicardia": {
+                category: "PALS",
+                title: "Pediátrico: Bradicardia Sintomática",
+                description: "Manejo de FC < 60 lpm con mala perfusión en lactantes/niños.",
+                icon: "fi fi-rr-turtle",
+                startNode: "node_1",
+                nodes: {
+                    "node_1": {
+                        text: "Lactante de 8 meses con FC de 50 lpm. Letargo y mala perfusión a pesar de oxigenación/ventilación adecuada. Siguiente paso:",
+                        options: [
+                            { text: "Iniciar RCP inmediatamente.", next: "node_2", isCorrect: true },
+                            { text: "Administrar Atropina 0.02 mg/kg.", next: "node_1", isCorrect: false, feedback: "Si FC < 60 lpm con mala perfusión tras ventilar, se inicia RCP." }
+                        ]
+                    },
+                    "node_2": {
+                        text: "Iniciaste RCP. Tienes acceso IO. Bradicardia persiste. Fármaco de primera línea:",
+                        options: [
+                            { text: "Atropina 0.02 mg/kg.", next: "node_2", isCorrect: false, feedback: "Atropina se reserva para tono vagal aumentado o bloqueo AV." },
+                            { text: "Adrenalina 0.01 mg/kg IV/IO. Repetir cada 3-5 minutos.", next: "end", isCorrect: true }
+                        ]
+                    }
+                }
+            },
+            "pals-taquicardia": {
+                category: "PALS",
+                title: "Pediátrico: Taquicardia",
+                description: "TSV y TV pediátrica. Cardioversión vs Adenosina.",
+                icon: "fi fi-rr-bolt",
+                startNode: "node_1",
+                nodes: {
+                    "node_1": {
+                        text: "Niño de 6 años INESTABLE. TSV a 230 lpm. ¿Manejo inmediato?",
+                        options: [
+                            { text: "Maniobras vagales.", next: "node_1", isCorrect: false, feedback: "Está inestable, no retrases la terapia eléctrica." },
+                            { text: "Cardioversión sincronizada inicial a 0.5 - 1 J/kg.", next: "node_2", isCorrect: true }
+                        ]
+                    },
+                    "node_2": {
+                        text: "Lactante de 4 meses con TSV a 250 lpm. ESTABLE. ¿Primer paso?",
+                        options: [
+                            { text: "Realizar maniobras vagales (ej. hielo en el rostro) mientras preparas IV.", next: "node_3", isCorrect: true },
+                            { text: "Cardioversión sincronizada de inmediato.", next: "node_2", isCorrect: false, feedback: "Si está estable, intentar maniobras vagales primero." }
+                        ]
+                    },
+                    "node_3": {
+                        text: "Maniobras fallan. Tienes IV. Sigue estable a 250 lpm. Fármaco indicado:",
+                        options: [
+                            { text: "Amiodarona 5 mg/kg IV.", next: "node_3", isCorrect: false, feedback: "Para TSV regular y estrecha, usar Adenosina." },
+                            { text: "Adenosina 0.1 mg/kg en bolo rápido IV, seguida de solución salina.", next: "end", isCorrect: true }
+                        ]
+                    }
+                }
+            },
+            "pals-choque": {
+                category: "PALS",
+                title: "Pediátrico: Choque",
+                description: "Manejo de fluidos y drogas vasoactivas en shock pediátrico.",
+                icon: "fi fi-rr-raindrops",
+                startNode: "node_1",
+                nodes: {
+                    "node_1": {
+                        text: "Niño de 2 años, fiebre, taquicardia, letargo y mala perfusión. Sospecha de choque séptico. Vía IV establecida. ¿Acción inicial?",
+                        options: [
+                            { text: "Administrar bolo de cristaloide isotónico de 20 ml/kg en 5 a 20 minutos.", next: "node_2", isCorrect: true },
+                            { text: "Iniciar infusión de Adrenalina o Noradrenalina.", next: "node_1", isCorrect: false, feedback: "La reanimación con líquidos es el primer paso." }
+                        ]
+                    },
+                    "node_2": {
+                        text: "2 bolos de 20 ml/kg administrados (40 ml/kg total). Sigue hipotenso y mal perfundido. Pulmones limpios (sin sobrecarga).",
+                        options: [
+                            { text: "Administrar Furosemida para evitar edema pulmonar.", next: "node_2", isCorrect: false, feedback: "Diuréticos agravarán el shock hipovolémico/séptico." },
+                            { text: "Iniciar soporte inotrópico / vasopresor (ej. Adrenalina o Noradrenalina).", next: "end", isCorrect: true }
+                        ]
+                    }
+                }
+            }
+        };
+
+        let currentAlgId = null;
+        let currentNodeId = null;
+
+        const homeView = document.getElementById('home-view');
+        const simView = document.getElementById('sim-view');
+        const cardsContainer = document.getElementById('cards-container');
+        const btnHome = document.getElementById('btn-home');
+        const simTitle = document.getElementById('sim-title');
+        const simIcon = document.getElementById('sim-icon');
+        const simCategory = document.getElementById('sim-category');
+        const simScenario = document.getElementById('sim-scenario');
+        const simOptions = document.getElementById('sim-options');
+        const simFeedback = document.getElementById('sim-feedback');
+
+        function init() {
+            renderCards();
+            btnHome.addEventListener('click', goHome);
+        }
+
+        function renderCards() {
+            cardsContainer.innerHTML = '';
+            for (const [id, alg] of Object.entries(db)) {
+                const col = document.createElement('div');
+                col.className = 'col';
+                let badgeClass = `badge-${alg.category}`;
+
+                col.innerHTML = `
+                    <div class="card h-100 shadow-sm rounded-4 interactive-card" onclick="startSimulation('${id}')">
+                        <div class="card-body text-center p-4 p-md-5 d-flex flex-column">
+                            <span class="badge ${badgeClass} mb-3 align-self-center px-3 py-2 fs-6 rounded-pill">${alg.category}</span>
+                            <div class="display-3 text-aha-blue mb-3"><i class="${alg.icon}"></i></div>
+                            <h4 class="card-title fw-bold text-dark mb-3">${alg.title}</h4>
+                            <p class="card-text text-muted mb-4 flex-grow-1">${alg.description}</p>
+                            <button class="btn btn-outline-dark w-100 fw-bold rounded-pill mt-auto">Iniciar Caso</button>
+                        </div>
+                    </div>
+                `;
+                cardsContainer.appendChild(col);
+            }
+        }
+
+        function goHome() {
+            simView.classList.add('d-none');
+            homeView.classList.remove('d-none');
+            homeView.classList.add('fade-in');
+            btnHome.classList.add('d-none');
+        }
+
+        function startSimulation(algId) {
+            currentAlgId = algId;
+            const alg = db[algId];
+            currentNodeId = alg.startNode;
+            
+            simTitle.textContent = alg.title;
+            simIcon.className = alg.icon;
+            
+            simCategory.textContent = alg.category;
+            simCategory.className = `badge badge-${alg.category} mb-2 px-3 py-2 fs-6 rounded-pill d-inline-block`;
+            
+            homeView.classList.add('d-none');
+            homeView.classList.remove('fade-in');
+            
+            simView.classList.remove('d-none');
+            simView.classList.add('fade-in');
+            
+            btnHome.classList.remove('d-none');
+            btnHome.classList.add('fade-in');
+            
+            renderNode();
+        }
+
+        function renderNode() {
+            const alg = db[currentAlgId];
+            
+            simScenario.classList.remove('fade-in');
+            void simScenario.offsetWidth; 
+            simScenario.classList.add('fade-in');
+            
+            simOptions.innerHTML = '';
+            simFeedback.classList.add('d-none');
+            simFeedback.className = "d-none alert mb-4 fw-bold"; 
+
+            if (currentNodeId === 'end') {
+                simScenario.innerHTML = `
+                    <div class="d-flex align-items-center text-success mb-3">
+                        <i class="fi fi-rr-check-circle fs-2 me-3"></i>
+                        <h4 class="mb-0 fw-bold">¡Protocolo Completado!</h4>
+                    </div>
+                    <p class="mb-0 text-dark">Has ejecutado las decisiones críticas correctamente basándote en las directrices AHA 2025.</p>
+                `;
+                
+                const btnReturn = document.createElement('button');
+                btnReturn.className = "btn btn-success btn-lg w-100 fw-bold rounded-pill fade-in shadow-sm p-3";
+                btnReturn.innerHTML = "<i class='fi fi-rr-apps me-2'></i> Volver al Menú";
+                btnReturn.onclick = goHome;
+                simOptions.appendChild(btnReturn);
+                return;
+            }
+
+            const node = alg.nodes[currentNodeId];
+            simScenario.innerHTML = `<i class="fi fi-rr-info text-aha-blue me-2"></i> ${node.text}`;
+
+            const shuffledOptions = [...node.options].sort(() => Math.random() - 0.5);
+
+            shuffledOptions.forEach((opt, index) => {
+                const btn = document.createElement('button');
+                btn.className = "btn btn-outline-dark text-start p-3 fs-6 rounded-3 d-flex align-items-center option-btn fade-in bg-white";
+                btn.style.animationDelay = `${index * 0.1}s`;
+                
+                btn.innerHTML = `
+                    <span class="badge bg-secondary option-badge me-3 fs-6">${String.fromCharCode(65 + index)}</span>
+                    <span class="lh-sm">${opt.text}</span>
+                `;
+                
+                btn.addEventListener('click', () => handleOptionClick(opt, btn));
+                simOptions.appendChild(btn);
+            });
+        }
+
+        function handleOptionClick(option, buttonElement) {
+            const buttons = simOptions.querySelectorAll('button');
+            buttons.forEach(b => b.disabled = true);
+
+            simFeedback.classList.remove('d-none');
+            simFeedback.classList.add('fade-in');
+            
+            if (option.isCorrect) {
+                buttonElement.classList.replace('btn-outline-dark', 'btn-success');
+                buttonElement.classList.remove('bg-white');
+                buttonElement.querySelector('.badge').classList.replace('bg-secondary', 'bg-light');
+                buttonElement.querySelector('.badge').classList.add('text-success');
+                
+                simFeedback.classList.add('alert-success', 'border-success');
+                simFeedback.innerHTML = `<i class="fi fi-rr-check me-2"></i> Decisión Correcta. Avanzando...`;
+                
+                setTimeout(() => {
+                    currentNodeId = option.next;
+                    renderNode();
+                }, 1800);
+
+            } else {
+                simView.classList.add('shake');
+                setTimeout(() => simView.classList.remove('shake'), 400);
+
+                buttonElement.classList.replace('btn-outline-dark', 'btn-danger');
+                buttonElement.classList.remove('bg-white');
+                buttonElement.querySelector('.badge').classList.replace('bg-secondary', 'bg-light');
+                buttonElement.querySelector('.badge').classList.add('text-danger');
+                
+                simFeedback.classList.add('alert-danger', 'border-danger');
+                simFeedback.innerHTML = `
+                    <div class="d-flex align-items-start">
+                        <i class="fi fi-rr-triangle-warning fs-4 me-3 mt-1"></i>
+                        <div>
+                            <span class="d-block text-danger text-uppercase mb-1">Error Clínico</span>
+                            <span class="fw-normal">${option.feedback}</span>
+                        </div>
+                    </div>
+                `;
+                
+                setTimeout(() => {
+                    buttons.forEach(b => {
+                        b.disabled = false;
+                        b.classList.remove('btn-danger');
+                        if(!b.classList.contains('btn-success')) {
+                            b.classList.add('btn-outline-dark', 'bg-white');
+                            b.querySelector('.badge').classList.replace('bg-light', 'bg-secondary');
+                            b.querySelector('.badge').classList.remove('text-danger');
+                        }
+                    });
+                    simFeedback.classList.add('d-none');
+                    simFeedback.className = "d-none alert mb-4 fw-bold"; 
+                }, 4000);
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", init);
+    </script>
+</body>
+</html>
